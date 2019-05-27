@@ -1,1 +1,4 @@
-DatabaseURI: host=localhost port=5432 user=todos_user dbname=todos_db password=123
+SecretKey: 000
+DatabaseURI: host=localhost port=26257 user=userdb dbname=databasename sslmode=disable
+SSLLabsAPIURL: https://api.ssllabs.com
+SSLLabsAPIVersion: v3
