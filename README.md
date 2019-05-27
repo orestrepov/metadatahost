@@ -1,5 +1,5 @@
-# Metadata Host
-Metadata Host Web Application in GO
+# Metadata Host Service
+Metadata Host Web Service in GO
 
 It is proof of concept of developing a web application in "Golang" to search for information associated with domains and the history of recent domains searches.
 
