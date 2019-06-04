@@ -68,6 +68,8 @@ func WhoisQuery(ip string) (*model.Whois, error) {
 func ScrapingWebPage(URL string) (*model.WebPage, error) {
 
 	var webPage model.WebPage
+	webPage.Title = ""
+	webPage.Logo = ""
 
 	// Request the HTML page
 	res, err := http.Get("http://" + URL)
@@ -91,11 +93,10 @@ func ScrapingWebPage(URL string) (*model.WebPage, error) {
 		webPage.Title = item.Find("title").Contents().Text()
 		// Recovery the page Logo image url
 		item.Find("link").Each(func(index int, item *goquery.Selection) {
-			if item.AttrOr("type", "") == "image/x-icon" {
-
-				linkTag := item
-				link, _ := linkTag.Attr("href")
-				//linkText := linkTag.Text()
+			linkTag := item
+			link, _ := linkTag.Attr("href")
+			rLogo, _ := regexp.Compile("(http.*\\.png)")
+			if rLogo.MatchString(link) && webPage.Logo == "" {
 				webPage.Logo = link
 			}
 		})
