@@ -12,6 +12,6 @@ go build -o metadatahost .
 
 # Endpoints
 ##### Example to search domain data:
-curl -v http://localhost:9095/api/hosts/search/www.mydomain.com
+curl -v http://localhost:9095/api/hosts/search/mydomain.com
 ##### Example to get history of domain search:
 curl -v http://localhost:9095/api/hosts/search/history
