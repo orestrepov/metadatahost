@@ -51,19 +51,22 @@ func (ctx *Context) DeleteHostById(id uint) error {
 }
 
 // List the previously searched domains
-func (ctx *Context) DomainSearchHistory() (*[]model.HostResponse, error) {
+func (ctx *Context) DomainSearchHistory() (*model.HistoryResponse, error) {
 
 	// Build the domain host data response
-	hostsResponse, err := BuildDomainHistoryResponse(ctx)
+	historyResponse, err := BuildDomainHistoryResponse(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return hostsResponse, nil
+	return historyResponse, nil
 }
 
 // Get the configuration data of a domain
 func (ctx *Context) SearchDomain(name string) (*model.HostResponse, error) {
+
+	// parse the domain name
+	name = getDomain(name)
 
 	// Get of domain data/configuration
 	domainData, err := GetDomainData(ctx, name)
@@ -104,7 +107,13 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 	var sslHost model.SSLHost
 	var host model.Host
 	var lowestGrade model.Grade
-	var existHost = false
+
+	// get and validate if the domain exist in db
+	previousHost, _ := ctx.Database.GetHostByName(domain)
+	if previousHost.ID != 0 {
+		host = *previousHost
+		logrus.Infof("The domain %s exist, id: %d", domain, previousHost.ID)
+	}
 
 	// we unmarshal our byteArray which contains our jsonFile's content into 'sshHost'
 	json.Unmarshal(data, &sslHost)
@@ -122,23 +131,16 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 		host.IsDown = false
 	}
 
-	// validate if the domain exist in db
-	previousHost, _ := ctx.Database.GetHostByName(domain)
+	// if the domain not exist in db create it
 	if previousHost.ID == 0 {
-		// save host in db
 		ctx.Database.CreateHost(&host)
 		logrus.Infof("The domain %s was created, id: %d", domain, host.ID)
-	} else {
-		// the host exist in db
-		logrus.Infof("The domain %s exist, id: %d", domain, previousHost.ID)
-		host.ID = previousHost.ID
-		existHost = true
 	}
 
 	// process and save the domain servers
 	ProcessServersData(ctx, host, sslHost.Endpoints, &lowestGrade)
 
-	if existHost {
+	if previousHost.ID != 0 {
 		// validate if the servers changed
 		if previousHost.SslGrade != lowestGrade.Name {
 			host.ServersChanged = true
@@ -148,7 +150,9 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 	}
 
 	// update host data
-	host.SslGrade = lowestGrade.Name
+	if len(lowestGrade.Name) > 0 {
+		host.SslGrade = lowestGrade.Name
+	}
 	logrus.Infof("The domain %s was updated, id: %d", host.Name, host.ID)
 	err := ctx.Database.UpdateHost(&host)
 	if err != nil {
@@ -164,12 +168,22 @@ func ProcessServersData(ctx *Context, host model.Host, endpoints []model.SSLEndp
 	// get Endpoints data
 	for i := 0; i < len(endpoints); i++ {
 		var serverDB model.Server
-		// get the whois data
-		whoisModel, _ := WhoisQuery(endpoints[i].IPAddress)
+		// validate if exist the server
+		previousServer, _ := ctx.Database.GetServerByAddress(endpoints[i].IPAddress)
+		if previousServer.ID != 0 {
+			serverDB = *previousServer
+		}
+		// get/set the whois data
+		whoisModel, err := WhoisQuery(endpoints[i].IPAddress)
+		if err == nil {
+			serverDB.Country = whoisModel.Country
+			serverDB.Owner = whoisModel.OrgName
+		}
+		// set other server data
 		serverDB.Address = endpoints[i].IPAddress
-		serverDB.SslGrade = endpoints[i].Grade
-		serverDB.Country = whoisModel.Country
-		serverDB.Owner = whoisModel.OrgName
+		if len(endpoints[i].Grade) > 0 {
+			serverDB.SslGrade = endpoints[i].Grade
+		}
 		serverDB.HostID = host.ID
 		serverDB.Host = host
 		// validate and set the lowest ssl grade between servers
@@ -182,7 +196,6 @@ func ProcessServersData(ctx *Context, host model.Host, endpoints []model.SSLEndp
 			lowestGrade.Name = serverDB.SslGrade
 		}
 		// save server in db
-		previousServer, _ := ctx.Database.GetServerByAddress(serverDB.Address)
 		if previousServer.ID == 0 {
 			ctx.Database.CreateServer(&serverDB)
 			logrus.Infof("The server %s was created, id: %d", serverDB.Address, serverDB.ID)
@@ -231,7 +244,7 @@ func BuildDomainSearchResponse(ctx *Context, host *model.Host) (*model.HostRespo
 }
 
 // Built the domain history json object
-func BuildDomainHistoryResponse(ctx *Context) (*[]model.HostResponse, error) {
+func BuildDomainHistoryResponse(ctx *Context) (*model.HistoryResponse, error) {
 
 	// get the hosts history
 	hosts, err := ctx.Database.GetHosts()
@@ -253,10 +266,13 @@ func BuildDomainHistoryResponse(ctx *Context) (*[]model.HostResponse, error) {
 		hostsResponse[i] = hostResponse
 	}
 
+	var historyResponse model.HistoryResponse
+	historyResponse.Items = hostsResponse
+
 	if err != nil {
 		logrus.Error(err)
 		return nil, err
 	}
 
-	return &hostsResponse, nil
+	return &historyResponse, nil
 }

@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 // HTTP client to consume API services
@@ -103,4 +104,12 @@ func ScrapingWebPage(URL string) (*model.WebPage, error) {
 	})
 
 	return &webPage, nil
+}
+
+// get the domain in the format domain.com.co
+func getDomain(domain string) string {
+	rDomainLine, _ := regexp.Compile("(!(http:\\/\\/|https:\\/\\/))?(!(www[0-9]?\\.))?[A-Za-z0-9.-]+(\\.\\w+)+")
+	domain = rDomainLine.FindString(domain)
+	domain = strings.Replace(domain, "www.", "", -1)
+	return domain
 }
