@@ -1,7 +1,7 @@
 # Metadata Host Service
 Metadata Host Web Service in GO
 
-It is proof of concept of developing a web application in "Golang" to search for information associated with domains and the history of recent domains searches.
+It is proof of concept in which it was developed a API in "Golang" to search for information associated with domains and the history of recent domains searches.
 
 # API Service
 # Build 
