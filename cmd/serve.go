@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/orestrepov/metadatahost/model"
 	"net/http"
 	"os"
 	"os/signal"
@@ -54,10 +53,16 @@ var serveCmd = &cobra.Command{
 			serveAPI(ctx, api)
 		}()
 
-		// start new
-		a.Database.AutoMigrate(&model.Host{}, &model.Host{})
-		a.Database.AutoMigrate(&model.Server{}, &model.Server{})
-		// end new
+		// Create the "accounts" table if not exists
+		if _, err := a.Database.Exec(
+			"CREATE TABLE IF NOT EXISTS hosts (id INT PRIMARY KEY DEFAULT unique_rowid(), name STRING, servers_changed BOOL, ssl_grade STRING, previous_ssl_grade STRING, logo STRING, title STRING, is_down BOOL, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ)"); err != nil {
+			logrus.Error(err)
+		}
+		// Create the "servers" table if not exists
+		if _, err := a.Database.Exec(
+			"CREATE TABLE IF NOT EXISTS servers (id INT PRIMARY KEY DEFAULT unique_rowid(), address STRING, ssl_grade STRING, country STRING, owner STRING, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ, host_id INT REFERENCES hosts(id) ON DELETE CASCADE)"); err != nil {
+			logrus.Error(err)
+		}
 
 		wg.Wait()
 		return nil

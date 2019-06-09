@@ -1,10 +1,13 @@
 package model
 
-import "github.com/jinzhu/gorm"
+import "time"
 
 // Server db model
 type Server struct {
-	gorm.Model
+	ID        uint
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
 
 	Address  string
 	SslGrade string

@@ -1,12 +1,13 @@
 package model
 
-import (
-	"github.com/jinzhu/gorm"
-)
+import "time"
 
 // Host db model
 type Host struct {
-	gorm.Model
+	ID        uint
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
 
 	Name             string
 	ServersChanged   bool

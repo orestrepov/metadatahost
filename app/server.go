@@ -17,25 +17,25 @@ func (ctx *Context) GetServersByHostId(hostId uint) ([]*model.Server, error) {
 	return ctx.Database.GetServersByHostId(hostId)
 }
 
-func (ctx *Context) CreateServer(server *model.Server) error {
+func (ctx *Context) CreateServer(server *model.Server) (int, error) {
 
 	return ctx.Database.CreateServer(server)
 }
 
-func (ctx *Context) UpdateServer(server *model.Server) error {
+func (ctx *Context) UpdateServer(server *model.Server) (int, error) {
 
 	if server.ID == 0 {
-		return &ValidationError{"cannot update"}
+		return 0, &ValidationError{"cannot update"}
 	}
 
 	return ctx.Database.UpdateServer(server)
 }
 
-func (ctx *Context) DeleteServerById(id uint) error {
+func (ctx *Context) DeleteServerById(id uint) (int, error) {
 
 	_, err := ctx.GetServerById(id)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	return ctx.Database.DeleteServerById(id)

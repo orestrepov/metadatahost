@@ -26,25 +26,25 @@ func (ctx *Context) GetHostByName(name string) (*model.Host, error) {
 	return host, nil
 }
 
-func (ctx *Context) CreateHost(host *model.Host) error {
+func (ctx *Context) CreateHost(host *model.Host) (int, error) {
 
 	return ctx.Database.CreateHost(host)
 }
 
-func (ctx *Context) UpdateHost(host *model.Host) error {
+func (ctx *Context) UpdateHost(host *model.Host) (int, error) {
 
 	if host.ID == 0 {
-		return &ValidationError{"cannot update"}
+		return 0, &ValidationError{"cannot update"}
 	}
 
 	return ctx.Database.UpdateHost(host)
 }
 
-func (ctx *Context) DeleteHostById(id uint) error {
+func (ctx *Context) DeleteHostById(id uint) (int, error) {
 
 	_, err := ctx.GetHostById(id)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	return ctx.Database.DeleteHostById(id)
@@ -110,16 +110,21 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 
 	// get and validate if the domain exist in db
 	previousHost, _ := ctx.Database.GetHostByName(domain)
-	if previousHost.ID != 0 {
+	if previousHost != nil {
 		host = *previousHost
 		logrus.Infof("The domain %s exist, id: %d", domain, previousHost.ID)
+		// Remove the previous servers when we do a new search and the host exists
+		err := RemovePreviousServers(ctx, host)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// we unmarshal our byteArray which contains our jsonFile's content into 'sshHost'
 	json.Unmarshal(data, &sslHost)
 
 	// set the host domain data
-	host.Name = sslHost.Name
+	host.Name = domain
 	host.ServersChanged = false
 	// scraping the web page to get the title and logo
 	webPage, errWebPage := ScrapingWebPage(domain)
@@ -132,15 +137,16 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 	}
 
 	// if the domain not exist in db create it
-	if previousHost.ID == 0 {
-		ctx.Database.CreateHost(&host)
-		logrus.Infof("The domain %s was created, id: %d", domain, host.ID)
+	if previousHost == nil {
+		hostId, _ := ctx.Database.CreateHost(&host)
+		host.ID = uint(hostId);
+		logrus.Infof("The domain %s was created, id: %d", domain, hostId)
 	}
 
 	// process and save the domain servers
 	ProcessServersData(ctx, host, sslHost.Endpoints, &lowestGrade)
 
-	if previousHost.ID != 0 {
+	if previousHost != nil {
 		// validate if the servers changed
 		if previousHost.SslGrade != lowestGrade.Name {
 			host.ServersChanged = true
@@ -153,11 +159,11 @@ func ProcessDomainData(ctx *Context, domain string, data []byte) (*model.Host, e
 	if len(lowestGrade.Name) > 0 {
 		host.SslGrade = lowestGrade.Name
 	}
-	logrus.Infof("The domain %s was updated, id: %d", host.Name, host.ID)
-	err := ctx.Database.UpdateHost(&host)
+	hostId, err := ctx.Database.UpdateHost(&host)
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infof("The domain %s was updated, id: %d", host.Name, hostId)
 
 	return &host, nil
 }
@@ -168,11 +174,6 @@ func ProcessServersData(ctx *Context, host model.Host, endpoints []model.SSLEndp
 	// get Endpoints data
 	for i := 0; i < len(endpoints); i++ {
 		var serverDB model.Server
-		// validate if exist the server
-		previousServer, _ := ctx.Database.GetServerByAddress(endpoints[i].IPAddress)
-		if previousServer.ID != 0 {
-			serverDB = *previousServer
-		}
 		// get/set the whois data
 		whoisModel, err := WhoisQuery(endpoints[i].IPAddress)
 		if err == nil {
@@ -196,15 +197,24 @@ func ProcessServersData(ctx *Context, host model.Host, endpoints []model.SSLEndp
 			lowestGrade.Name = serverDB.SslGrade
 		}
 		// save server in db
-		if previousServer.ID == 0 {
-			ctx.Database.CreateServer(&serverDB)
-			logrus.Infof("The server %s was created, id: %d", serverDB.Address, serverDB.ID)
-		} else {
-			serverDB.ID = previousServer.ID
-			ctx.Database.UpdateServer(&serverDB)
-			logrus.Infof("The server %s exist and it was updated, id: %d", serverDB.Address, serverDB.ID)
+		serverId, err := ctx.Database.CreateServer(&serverDB)
+		logrus.Infof("The server %s was created, id: %d", serverDB.Address, serverId)
+	}
+}
+
+// Remove the previous servers of a host
+func RemovePreviousServers(ctx *Context, host model.Host) error{
+	servers, err := ctx.Database.GetServersByHostId(host.ID)
+	if err == nil {
+		for i := 0; i < len(servers); i++ {
+			deletedId, err := ctx.Database.DeleteServerById(servers[i].ID)
+			if err != nil {
+				return err
+			}
+			logrus.Infof("The server %s was deleted, id: %d", servers[i].Address, deletedId)
 		}
 	}
+	return err
 }
 
 // Built the domain response json object
